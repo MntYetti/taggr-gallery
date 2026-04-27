@@ -70,6 +70,7 @@ export function PostDetail({
               src={activePost.imageUrl}
               alt={imageAlt(activePost.authorHandle, activePost.realm)}
               className="max-h-[78vh] w-full object-contain"
+              referrerPolicy="no-referrer"
             />
           ) : (
             <div className="p-5 md:p-8">

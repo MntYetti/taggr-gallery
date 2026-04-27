@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { ExternalLink, Play } from "lucide-react";
+import { safeWebUrl } from "../../lib/security/urls";
 
 type MarkdownContentProps = {
   source: string;
@@ -222,11 +223,7 @@ function renderInlineToken(token: string, key: number, disableLinks: boolean) {
       );
     }
 
-    return (
-      <a key={key} href={image[2]} rel="noreferrer" target="_blank">
-        {image[1] || "image"}
-      </a>
-    );
+    return <MarkdownLink key={key} href={image[2]} label={image[1] || "image"} />;
   }
 
   const link = token.match(/^\[([^\]]+)]\(([^)]+)\)$/);
@@ -257,8 +254,12 @@ function renderInlineToken(token: string, key: number, disableLinks: boolean) {
 }
 
 function MarkdownLink({ href, label }: { href: string; label: string }) {
+  const safeHref = safeWebUrl(href);
+
+  if (!safeHref) return <span className="markdown-link-text">{label}</span>;
+
   return (
-    <a href={href} rel="noreferrer" target="_blank">
+    <a href={safeHref} rel="noreferrer" target="_blank">
       {label}
     </a>
   );

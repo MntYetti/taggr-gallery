@@ -74,6 +74,7 @@ export function ForumPostRow({
               alt={imageAlt(post.authorHandle, post.realm)}
               className="h-full max-h-40 w-full object-cover grayscale-[18%] transition hover:grayscale-0"
               loading="lazy"
+              referrerPolicy="no-referrer"
               src={post.imageUrl}
             />
           ) : (

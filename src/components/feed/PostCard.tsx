@@ -27,6 +27,7 @@ export function PostCard({
               alt={imageAlt(post.authorHandle, post.realm)}
               className="h-auto w-full object-cover grayscale-[18%] transition duration-300 group-hover:grayscale-0"
               loading="lazy"
+              referrerPolicy="no-referrer"
             />
             <div className="absolute inset-x-0 bottom-0 hidden bg-[linear-gradient(transparent,rgba(0,0,0,0.76))] p-3 text-white opacity-0 transition group-hover:opacity-100 md:block">
               <Meta post={post} overlay />

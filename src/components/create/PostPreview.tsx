@@ -17,6 +17,7 @@ export function PostPreview({ input }: { input: CreatePostInput }) {
           src={input.imageUrl}
           alt="Post preview"
           className="mb-3 max-h-96 w-full object-cover"
+          referrerPolicy="no-referrer"
         />
       ) : (
         <div className="mb-3 grid h-56 place-items-center border border-[var(--color-border)] font-mono text-xs uppercase text-[var(--color-muted)]">

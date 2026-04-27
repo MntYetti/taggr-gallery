@@ -10,6 +10,7 @@ export function ProfileHeader({ profile }: { profile: TaggrProfile }) {
             src={profile.avatarUrl}
             alt={`${profile.handle} avatar`}
             className="h-full w-full object-cover grayscale-[20%]"
+            referrerPolicy="no-referrer"
           />
         ) : null}
       </div>

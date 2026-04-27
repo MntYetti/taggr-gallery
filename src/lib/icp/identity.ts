@@ -11,6 +11,7 @@ const TAGGR_CANONICAL_AUTH_URL =
 const TAGGR_AUTH_MODE = import.meta.env.VITE_TAGGR_AUTH_MODE ?? "delegation";
 const TAGGR_DELEGATION_DOMAIN = import.meta.env.VITE_TAGGR_DELEGATION_DOMAIN;
 const LOCAL_IDENTITY_KEY = "IDENTITY";
+const LEGACY_LOCAL_IDENTITY_KEY = LOCAL_IDENTITY_KEY;
 
 let authClientPromise: Promise<AuthClient> | null = null;
 
@@ -72,10 +73,19 @@ function assertDelegationDomainSupported(domain: string) {
 }
 
 function getLocalIdentity(): Identity | null {
-  const serializedIdentity = localStorage.getItem(LOCAL_IDENTITY_KEY);
-  return serializedIdentity
-    ? Ed25519KeyIdentity.fromJSON(serializedIdentity)
-    : null;
+  const serializedIdentity = sessionStorage.getItem(LOCAL_IDENTITY_KEY);
+  if (!serializedIdentity) return null;
+
+  try {
+    return Ed25519KeyIdentity.fromJSON(serializedIdentity);
+  } catch {
+    sessionStorage.removeItem(LOCAL_IDENTITY_KEY);
+    return null;
+  }
+}
+
+function clearLegacyLocalIdentity() {
+  localStorage.removeItem(LEGACY_LOCAL_IDENTITY_KEY);
 }
 
 function startTaggrDelegationLogin() {
@@ -84,7 +94,8 @@ function startTaggrDelegationLogin() {
 
   const randomSeed = crypto.getRandomValues(new Uint8Array(32));
   const identity = Ed25519KeyIdentity.generate(randomSeed);
-  localStorage.setItem(LOCAL_IDENTITY_KEY, JSON.stringify(identity.toJSON()));
+  clearLegacyLocalIdentity();
+  sessionStorage.setItem(LOCAL_IDENTITY_KEY, JSON.stringify(identity.toJSON()));
 
   const principal = identity.getPrincipal().toString();
   window.location.href = `https://${canonicalAuthHost()}/#/delegate/${domain}/${principal}`;
@@ -112,11 +123,13 @@ export const identityAdapter = {
 
   async logout(): Promise<void> {
     const client = await getAuthClient();
-    localStorage.removeItem(LOCAL_IDENTITY_KEY);
+    sessionStorage.removeItem(LOCAL_IDENTITY_KEY);
+    clearLegacyLocalIdentity();
     await client.logout();
   },
 
   async getIdentity(): Promise<Identity | null> {
+    clearLegacyLocalIdentity();
     const localIdentity = getLocalIdentity();
     if (localIdentity) return localIdentity;
 
@@ -125,6 +138,7 @@ export const identityAdapter = {
   },
 
   async isAuthenticated(): Promise<boolean> {
+    clearLegacyLocalIdentity();
     if (getLocalIdentity()) return true;
 
     const client = await getAuthClient();

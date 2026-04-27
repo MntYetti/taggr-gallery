@@ -22,6 +22,7 @@ export function RealmCard({
               alt={`Recent visual from ${realm.name}`}
               className="h-full w-full object-cover grayscale-[22%]"
               loading="lazy"
+              referrerPolicy="no-referrer"
             />
           ))
         ) : (
