@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Children, type ReactNode } from "react";
 import { cx } from "../../lib/utils/classNames";
 
 export function MasonryGrid({
@@ -8,18 +8,27 @@ export function MasonryGrid({
   children: ReactNode;
   density: "compact" | "comfortable" | "large";
 }) {
+  const itemClass = cx(
+    "inline-block w-full break-inside-avoid align-top",
+    density === "compact" && "mb-3",
+    density === "comfortable" && "mb-4",
+    density === "large" && "mb-5",
+  );
+
   return (
     <div
       className={cx(
-        "gallery-grid px-4 py-5 md:px-6",
+        "px-4 py-5 md:px-6",
         density === "compact" &&
-          "grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5",
+          "columns-2 gap-3 md:columns-3 xl:columns-5",
         density === "comfortable" &&
-          "grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4",
-        density === "large" && "grid-cols-1 gap-5 md:grid-cols-2 2xl:grid-cols-3",
+          "columns-1 gap-4 sm:columns-2 xl:columns-4",
+        density === "large" && "columns-1 gap-5 md:columns-2 2xl:columns-3",
       )}
     >
-      {children}
+      {Children.map(children, (child) =>
+        child ? <div className={itemClass}>{child}</div> : null,
+      )}
     </div>
   );
 }
