@@ -23,8 +23,7 @@ import type {
 const TAGGR_CANISTER_ID =
   import.meta.env.VITE_TAGGR_CANISTER_ID || "6qfxa-ryaaa-aaaai-qbhsq-cai";
 const TAGGR_DOMAIN = import.meta.env.VITE_TAGGR_DOMAIN || "taggr.link";
-const AGENT_HOST =
-  import.meta.env.VITE_ICP_HOST || `https://${TAGGR_CANISTER_ID}.ic0.app`;
+const AGENT_HOST = import.meta.env.VITE_ICP_HOST || "https://icp-api.io";
 const CANONICAL_BASE =
   import.meta.env.VITE_TAGGR_CANONICAL_URL || "https://taggr.link";
 

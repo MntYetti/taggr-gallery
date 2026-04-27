@@ -25,11 +25,11 @@ Copy `.env.example` to `.env` and adjust values:
 ```bash
 VITE_TAGGR_CANISTER_ID=6qfxa-ryaaa-aaaai-qbhsq-cai
 VITE_TAGGR_API_MODE=real
-VITE_TAGGR_DOMAIN=taggr.link
-VITE_TAGGR_CANONICAL_URL=https://taggr.link
+VITE_TAGGR_DOMAIN=6qfxa-ryaaa-aaaai-qbhsq-cai.icp0.io
+VITE_TAGGR_CANONICAL_URL=https://6qfxa-ryaaa-aaaai-qbhsq-cai.icp0.io
 VITE_TAGGR_CANONICAL_AUTH_URL=https://6qfxa-ryaaa-aaaai-qbhsq-cai.icp0.io
 VITE_TAGGR_AUTH_MODE=delegation
-VITE_TAGGR_DELEGATION_DOMAIN=
+VITE_TAGGR_DELEGATION_DOMAIN=taggr-gallery.promptops.cc
 VITE_ICP_HOST=
 VITE_II_URL=https://id.ai/?feature_flag_guided_upgrade=true
 VITE_USD_PER_XDR=1.37
@@ -43,7 +43,7 @@ VITE_APP_NAME=Taggr Gallery
 
 Authentication follows Taggr’s custom-frontend model. By default, `VITE_TAGGR_AUTH_MODE=delegation` creates a temporary local identity and redirects the user to Taggr’s canister-hosted canonical frontend, configured by `VITE_TAGGR_CANONICAL_AUTH_URL`, to authorize that identity through Taggr’s `set_delegation` flow. Set `VITE_TAGGR_AUTH_MODE=direct` only for canonical deployments or local experiments where you intentionally want direct Internet Identity against the current origin.
 
-Important: Taggr only authorizes delegation for domains registered in Taggr’s backend domain registry. `localhost`, `127.0.0.1`, and raw IPFS gateway CID hosts cannot be authorized as your existing Taggr account. For local development and public IPFS previews, public browsing works; authenticated writes need either a registered custom domain or a canonical/canister-hosted deployment. `VITE_TAGGR_DELEGATION_DOMAIN` can be used when the served origin is behind a registered HTTPS domain, for example an IPFS DNSLink/custom-domain gateway that has also been added in Taggr’s Domains settings.
+Important: Taggr only authorizes delegation for domains registered in Taggr’s backend domain registry. `localhost`, `127.0.0.1`, and raw IPFS gateway CID hosts cannot be authorized as your existing Taggr account. For local development and public IPFS previews, public browsing works; authenticated writes need either a registered custom domain or a canonical/canister-hosted deployment. This repo’s intended production host is `taggr-gallery.promptops.cc`, so `VITE_TAGGR_DELEGATION_DOMAIN` is set to that value in `.env.example`. That domain still needs to be registered in Taggr’s Domains settings before delegated login will work there.
 
 Direct Internet Identity mode follows Taggr’s frontend settings: `https://id.ai/?feature_flag_guided_upgrade=true`, disabled auth-client idle timeout, 30-day max delegation lifetime, and `derivationOrigin` set to the current frontend origin.
 
