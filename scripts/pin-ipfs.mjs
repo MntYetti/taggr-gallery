@@ -1,5 +1,51 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
+import { PinataSDK } from "pinata";
+
+async function loadLocalEnv(filePath = ".env") {
+  try {
+    const content = await readFile(filePath, "utf8");
+
+    for (const rawLine of content.split(/\r?\n/)) {
+      const line = rawLine.trim();
+
+      if (!line || line.startsWith("#")) {
+        continue;
+      }
+
+      const separatorIndex = line.includes("=")
+        ? line.indexOf("=")
+        : line.indexOf(":");
+
+      if (separatorIndex === -1) {
+        continue;
+      }
+
+      const key = line.slice(0, separatorIndex).trim();
+
+      if (!key || process.env[key]) {
+        continue;
+      }
+
+      let value = line.slice(separatorIndex + 1).trim();
+
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+
+      process.env[key] = value;
+    }
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
+await loadLocalEnv();
 
 const pinataJwt = process.env.PINATA_JWT;
 const sourceDir = process.env.IPFS_SOURCE_DIR ?? "dist";
@@ -34,44 +80,21 @@ if (files.length === 0) {
   throw new Error(`No files found in ${sourceDir}. Run npm run build first.`);
 }
 
-const formData = new FormData();
+const uploadFiles = await Promise.all(
+  files.map(async (filePath) => {
+    const bytes = await readFile(filePath);
+    const relativePath = relative(sourceDir, filePath).split(sep).join("/");
 
-for (const filePath of files) {
-  const bytes = await readFile(filePath);
-  const relativePath = relative(sourceDir, filePath).split(sep).join("/");
-  formData.append("file", new Blob([bytes]), relativePath);
-}
-
-formData.append(
-  "pinataMetadata",
-  JSON.stringify({
-    name: pinName,
+    return new File([bytes], relativePath);
   }),
 );
 
-formData.append(
-  "pinataOptions",
-  JSON.stringify({
-    cidVersion: 1,
-  }),
-);
-
-const response = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
-  method: "POST",
-  headers: {
-    Authorization: `Bearer ${pinataJwt}`,
-  },
-  body: formData,
+const pinata = new PinataSDK({
+  pinataJwt,
 });
 
-const text = await response.text();
-
-if (!response.ok) {
-  throw new Error(`Pinata pin failed (${response.status}): ${text}`);
-}
-
-const result = JSON.parse(text);
-const cid = result.IpfsHash;
+const result = await pinata.upload.public.fileArray(uploadFiles).name(pinName);
+const cid = result.cid;
 
 console.log(`Pinned ${sourceDir} to IPFS: ${cid}`);
 console.log(`Gateway: https://${cid}.ipfs.dweb.link/`);
