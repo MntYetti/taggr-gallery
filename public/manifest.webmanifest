@@ -1,0 +1,10 @@
+{
+  "name": "Taggr Gallery",
+  "short_name": "Taggr Gallery",
+  "description": "A visual archive frontend for Taggr on ICP.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#090a08",
+  "theme_color": "#96d7b2",
+  "icons": []
+}

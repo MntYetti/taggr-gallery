@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.ipfs-taggr/
+
+.env
+.env.local
+.env.*.local
+
+*.log
+*.car
+.DS_Store
+

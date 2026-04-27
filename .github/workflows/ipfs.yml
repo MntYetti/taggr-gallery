@@ -1,0 +1,52 @@
+name: Build and pin IPFS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-pin:
+    name: Build and pin static frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: taggr-gallery-client-dist
+          path: dist
+
+      - name: Pin build to IPFS
+        id: pin
+        env:
+          PINATA_JWT: ${{ secrets.PINATA_JWT }}
+          PINATA_NAME: taggr-gallery-client-${{ github.sha }}
+        run: node scripts/pin-ipfs.mjs
+
+      - name: Publish IPFS summary
+        if: steps.pin.outputs.cid != ''
+        run: |
+          echo "### IPFS deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "CID: \`${{ steps.pin.outputs.cid }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Gateway: https://${{ steps.pin.outputs.cid }}.ipfs.dweb.link/" >> "$GITHUB_STEP_SUMMARY"

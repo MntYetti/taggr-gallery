@@ -1,0 +1,145 @@
+import { useEffect, useState } from "react";
+import { taggrClient } from "../../lib/taggr/taggrClient";
+import type { TaggrComment, TaggrPost } from "../../lib/taggr/taggrTypes";
+import { formatDate } from "../../lib/utils/formatDate";
+import { imageAlt } from "../../lib/utils/image";
+import { Badge } from "../ui/Badge";
+import { Modal } from "../ui/Modal";
+import { PostCard } from "../feed/PostCard";
+import { MarkdownContent } from "../content/MarkdownContent";
+import { CommentThread } from "./CommentThread";
+import { ReactionBar } from "./ReactionBar";
+
+export function PostDetail({
+  post,
+  isAuthenticated,
+  onClose,
+  onOpenPost,
+  onOpenProfile,
+}: {
+  post: TaggrPost;
+  isAuthenticated: boolean;
+  onClose: () => void;
+  onOpenPost: (post: TaggrPost) => void;
+  onOpenProfile: (handle: string) => void;
+}) {
+  const [comments, setComments] = useState<TaggrComment[]>([]);
+  const [related, setRelated] = useState<TaggrPost[]>([]);
+  const [activePost, setActivePost] = useState(post);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setActivePost(post);
+    taggrClient.getComments(post.id).then(setComments);
+    taggrClient
+      .getFeed({ realm: post.realm, imagesOnly: true, sort: "trending" })
+      .then((items) => setRelated(items.filter((item) => item.id !== post.id).slice(0, 3)));
+  }, [post]);
+
+  async function react(reactionId: number) {
+    setError(null);
+    try {
+      await taggrClient.reactToPost(activePost.id, reactionId);
+      const nextPost = await taggrClient.getPost(activePost.id);
+      if (nextPost) setActivePost(nextPost);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not react to post");
+    }
+  }
+
+  async function copyLink() {
+    const link = activePost.canonicalUrl ?? `${window.location.origin}/?post=${activePost.id}`;
+    await navigator.clipboard.writeText(link);
+  }
+
+  const body = activePost.bodyMarkdown ?? activePost.text;
+  const hasImage = Boolean(activePost.imageUrl);
+
+  return (
+    <Modal title={`post ${activePost.id}`} onClose={onClose}>
+      <div
+        className={
+          hasImage
+            ? "grid gap-0 lg:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]"
+            : "grid gap-0 lg:grid-cols-[minmax(0,0.95fr)_minmax(360px,0.55fr)]"
+        }
+      >
+        <div className="border-b border-[var(--color-border)] bg-black/20 lg:border-b-0 lg:border-r">
+          {hasImage && activePost.imageUrl ? (
+            <img
+              src={activePost.imageUrl}
+              alt={imageAlt(activePost.authorHandle, activePost.realm)}
+              className="max-h-[78vh] w-full object-contain"
+            />
+          ) : (
+            <div className="p-5 md:p-8">
+              <MarkdownContent className="post-detail-primary-copy" source={body} />
+            </div>
+          )}
+        </div>
+
+        <aside className="space-y-5 p-4 md:p-6">
+          <div className="space-y-3">
+            <Badge>{activePost.realm ?? "taggr"}</Badge>
+            <div>
+              <button
+                className="font-mono text-xs uppercase text-[var(--color-accent)] hover:underline"
+                onClick={() => onOpenProfile(activePost.authorHandle)}
+                type="button"
+              >
+                {activePost.authorHandle}
+              </button>
+              <time
+                className="font-mono text-[11px] uppercase text-[var(--color-muted)]"
+                dateTime={activePost.createdAt}
+              >
+                {formatDate(activePost.createdAt)}
+              </time>
+            </div>
+            {hasImage ? <MarkdownContent source={body} /> : null}
+          </div>
+
+          <ReactionBar
+            post={activePost}
+            isAuthenticated={isAuthenticated}
+            onReact={react}
+            onCopyLink={copyLink}
+          />
+
+          {error ? (
+            <p className="border border-[var(--color-danger)] p-3 text-sm text-[var(--color-danger)]">
+              {error}
+            </p>
+          ) : null}
+
+          <CommentThread
+            postId={activePost.id}
+            comments={comments}
+            isAuthenticated={isAuthenticated}
+            onCommentCreated={(comment) => setComments((items) => [comment, ...items])}
+            onOpenProfile={onOpenProfile}
+          />
+
+          {related.length ? (
+            <section>
+              <h3 className="mb-3 font-mono text-xs uppercase text-[var(--color-muted)]">
+                Related fragments
+              </h3>
+              <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+                {related.map((item) => (
+                  <PostCard
+                    key={item.id}
+                    post={item}
+                    onOpen={(nextPost) => {
+                      onOpenPost(nextPost);
+                    }}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </aside>
+      </div>
+    </Modal>
+  );
+}

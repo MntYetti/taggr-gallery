@@ -1,0 +1,49 @@
+:root,
+[data-theme="noir"] {
+  --color-bg: #080908;
+  --color-panel: #111411;
+  --color-panel-strong: #181d18;
+  --color-text: #f2f0e8;
+  --color-muted: #9b9f97;
+  --color-soft: #d9d4c6;
+  --color-border: #2a3029;
+  --color-grid: #242b24;
+  --color-noise: #d6e8d0;
+  --color-accent: #95d7b2;
+  --color-accent-2: #89c8d6;
+  --color-danger: #e68a8a;
+  --color-shadow: #000000;
+}
+
+[data-theme="amber"] {
+  --color-bg: #120d08;
+  --color-panel: #1c140c;
+  --color-panel-strong: #281b0f;
+  --color-text: #ffe8b6;
+  --color-muted: #b99d73;
+  --color-soft: #f5d799;
+  --color-border: #44301a;
+  --color-grid: #3d2a17;
+  --color-noise: #ffd17c;
+  --color-accent: #ffbf58;
+  --color-accent-2: #8cc8bd;
+  --color-danger: #f18c74;
+  --color-shadow: #070402;
+}
+
+[data-theme="paper"] {
+  color-scheme: light;
+  --color-bg: #eee9dc;
+  --color-panel: #fbf7ea;
+  --color-panel-strong: #fffdf4;
+  --color-text: #22221f;
+  --color-muted: #716e65;
+  --color-soft: #3c3a35;
+  --color-border: #c9beaa;
+  --color-grid: #d9cfbd;
+  --color-noise: #796f61;
+  --color-accent: #a94c42;
+  --color-accent-2: #456f82;
+  --color-danger: #a94c42;
+  --color-shadow: #9c9280;
+}
