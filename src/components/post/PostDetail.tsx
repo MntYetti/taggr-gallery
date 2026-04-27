@@ -8,33 +8,51 @@ import { Modal } from "../ui/Modal";
 import { PostCard } from "../feed/PostCard";
 import { MarkdownContent } from "../content/MarkdownContent";
 import { CommentThread } from "./CommentThread";
+import { PollPanel } from "./PollPanel";
 import { ReactionBar } from "./ReactionBar";
 
 export function PostDetail({
   post,
   isAuthenticated,
+  canEdit,
   onClose,
+  onEditPost,
   onOpenPost,
   onOpenProfile,
+  onQuotePost,
 }: {
   post: TaggrPost;
   isAuthenticated: boolean;
+  canEdit?: boolean;
   onClose: () => void;
+  onEditPost: (post: TaggrPost) => void;
   onOpenPost: (post: TaggrPost) => void;
   onOpenProfile: (handle: string) => void;
+  onQuotePost: (post: TaggrPost) => void;
 }) {
   const [comments, setComments] = useState<TaggrComment[]>([]);
   const [related, setRelated] = useState<TaggrPost[]>([]);
+  const [repost, setRepost] = useState<TaggrPost | null>(null);
   const [activePost, setActivePost] = useState(post);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setActivePost(post);
+    setRepost(null);
     taggrClient.getComments(post.id).then(setComments);
     taggrClient
       .getFeed({ realm: post.realm, imagesOnly: true, sort: "trending" })
       .then((items) => setRelated(items.filter((item) => item.id !== post.id).slice(0, 3)));
   }, [post]);
+
+  useEffect(() => {
+    if (!activePost.repostId) {
+      setRepost(null);
+      return;
+    }
+
+    taggrClient.getPost(activePost.repostId).then(setRepost).catch(() => setRepost(null));
+  }, [activePost.repostId]);
 
   async function react(reactionId: number) {
     setError(null);
@@ -50,6 +68,17 @@ export function PostDetail({
   async function copyLink() {
     const link = activePost.canonicalUrl ?? `${window.location.origin}/?post=${activePost.id}`;
     await navigator.clipboard.writeText(link);
+  }
+
+  async function voteOnPoll(option: number, anonymously: boolean) {
+    setError(null);
+    try {
+      await taggrClient.voteOnPoll(activePost.id, option, anonymously);
+      const nextPost = await taggrClient.getPost(activePost.id);
+      if (nextPost) setActivePost(nextPost);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not vote on poll");
+    }
   }
 
   const body = activePost.bodyMarkdown ?? activePost.text;
@@ -100,10 +129,31 @@ export function PostDetail({
             {hasImage ? <MarkdownContent source={body} /> : null}
           </div>
 
+          {activePost.poll ? (
+            <PollPanel
+              poll={activePost.poll}
+              createdAt={activePost.createdAt}
+              isAuthenticated={isAuthenticated}
+              onVote={voteOnPoll}
+            />
+          ) : null}
+
+          {repost ? (
+            <section className="space-y-3 border border-[var(--color-border)] bg-[var(--color-panel)] p-3">
+              <p className="font-mono text-xs uppercase text-[var(--color-muted)]">
+                Quoted fragment
+              </p>
+              <PostCard post={repost} onOpen={onOpenPost} />
+            </section>
+          ) : null}
+
           <ReactionBar
             post={activePost}
             isAuthenticated={isAuthenticated}
+            canEdit={canEdit}
             onReact={react}
+            onEditPost={() => onEditPost(activePost)}
+            onQuotePost={() => onQuotePost(activePost)}
             onCopyLink={copyLink}
           />
 

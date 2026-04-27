@@ -1,4 +1,4 @@
-import { Copy, DollarSign, ExternalLink, MessageCircle } from "lucide-react";
+import { Copy, DollarSign, ExternalLink, MessageCircle, Pencil } from "lucide-react";
 import type { TaggrPost } from "../../lib/taggr/taggrTypes";
 import { formatUsd, postRewardUsd, rewardCreditsLabel } from "../../lib/utils/rewards";
 import { Button } from "../ui/Button";
@@ -7,12 +7,18 @@ import { ReactionEmoji, reactionEmojiLabel } from "./ReactionEmoji";
 export function ReactionBar({
   post,
   isAuthenticated,
+  canEdit,
   onReact,
+  onEditPost,
+  onQuotePost,
   onCopyLink,
 }: {
   post: TaggrPost;
   isAuthenticated: boolean;
+  canEdit?: boolean;
   onReact: (reactionId: number) => void;
+  onEditPost: () => void;
+  onQuotePost: () => void;
   onCopyLink: () => void;
 }) {
   const reactions = post.reactionOptions ?? [];
@@ -60,6 +66,15 @@ export function ReactionBar({
           <Copy size={16} />
           Copy
         </Button>
+        <Button variant="ghost" onClick={onQuotePost}>
+          Quote
+        </Button>
+        {canEdit ? (
+          <Button variant="ghost" onClick={onEditPost}>
+            <Pencil size={16} />
+            Edit
+          </Button>
+        ) : null}
         {post.canonicalUrl ? (
           <a
             className="inline-flex h-11 items-center justify-center gap-2 border border-transparent px-4 font-mono text-sm uppercase text-[var(--color-muted)] transition hover:bg-[var(--color-panel)] hover:text-[var(--color-text)]"

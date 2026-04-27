@@ -1,9 +1,11 @@
 import type {
   CreateCommentInput,
   CreatePostInput,
+  EditPostInput,
   FeedParams,
   TaggrClient,
   TaggrComment,
+  TaggrPoll,
   TaggrPost,
   TaggrProfile,
   TaggrRealm,
@@ -11,6 +13,25 @@ import type {
 
 const now = new Date();
 const mockFeedPageSize = 8;
+
+function profilePostsFor(userIdOrHandle: string) {
+  return posts.filter(
+    (post) => post.authorId === userIdOrHandle || post.authorHandle === userIdOrHandle,
+  );
+}
+
+function createPoll(poll?: CreatePostInput["poll"]): TaggrPoll | undefined {
+  if (!poll) return undefined;
+
+  return {
+    options: poll.options,
+    votes: {},
+    voters: [],
+    deadline: poll.deadline,
+    weighted_by_karma: {},
+    weighted_by_tokens: {},
+  };
+}
 
 function daysAgo(days: number, hours = 0) {
   const date = new Date(now);
@@ -335,7 +356,7 @@ export const mockTaggrClient: TaggrClient = {
   },
 
   async getProfile(userId) {
-    const profilePosts = posts.filter((post) => post.authorId === userId);
+    const profilePosts = profilePostsFor(userId);
     const firstPost = profilePosts[0] ?? posts[0];
 
     return {
@@ -353,6 +374,14 @@ export const mockTaggrClient: TaggrClient = {
     } satisfies TaggrProfile;
   },
 
+  async getProfilePosts(handle, page) {
+    const profilePosts = profilePostsFor(handle);
+    return profilePosts.slice(
+      page * mockFeedPageSize,
+      (page + 1) * mockFeedPageSize,
+    );
+  },
+
   async createPost(input: CreatePostInput) {
     const post: TaggrPost = {
       id: `post-${crypto.randomUUID()}`,
@@ -361,8 +390,13 @@ export const mockTaggrClient: TaggrClient = {
       realm: input.realm,
       text: input.text,
       bodyMarkdown: input.text,
-      imageUrl: input.imageUrl,
-      mediaUrls: input.imageUrl ? [input.imageUrl] : [],
+      imageUrl: input.attachment?.previewUrl ?? input.imageUrl,
+      mediaUrls:
+        input.attachment?.previewUrl || input.imageUrl
+          ? [input.attachment?.previewUrl ?? input.imageUrl ?? ""]
+          : [],
+      poll: createPoll(input.poll),
+      repostId: input.repostId,
       createdAt: new Date().toISOString(),
       commentsCount: 0,
       reactionsCount: 0,
@@ -371,6 +405,19 @@ export const mockTaggrClient: TaggrClient = {
     };
 
     posts.unshift(post);
+    return post;
+  },
+
+  async editPost(input: EditPostInput) {
+    const post = posts.find((item) => item.id === input.postId);
+    if (!post) throw new Error("Post not found");
+
+    post.realm = input.realm;
+    post.text = input.text;
+    post.bodyMarkdown = input.text;
+    post.imageUrl = input.attachment?.previewUrl ?? input.imageUrl ?? post.imageUrl;
+    post.mediaUrls = post.imageUrl ? [post.imageUrl] : [];
+    post.repostId = input.repostId ?? post.repostId;
     return post;
   },
 
@@ -391,5 +438,25 @@ export const mockTaggrClient: TaggrClient = {
   async reactToPost(postId) {
     const post = posts.find((item) => item.id === postId);
     if (post) post.reactionsCount += 1;
+  },
+
+  async voteOnPoll(postId, option, anonymously = false) {
+    const post = posts.find((item) => item.id === postId);
+    if (!post?.poll) throw new Error("Poll not found");
+    if (option < 0 || option >= post.poll.options.length) {
+      throw new Error("Invalid poll option");
+    }
+
+    const voterId = 9999;
+    if (!post.poll.voters.includes(voterId)) {
+      post.poll.voters.push(voterId);
+    }
+    if (!anonymously) {
+      const key = String(option);
+      const list = post.poll.votes[key] ?? [];
+      if (!list.includes(voterId)) {
+        post.poll.votes[key] = [...list, voterId];
+      }
+    }
   },
 };

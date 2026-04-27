@@ -13,6 +13,7 @@ import { Button } from "../components/ui/Button";
 import { Toggle } from "../components/ui/Toggle";
 import { taggrClient } from "../lib/taggr/taggrClient";
 import type {
+  CreatePostInput,
   TaggrPost,
   TaggrProfile,
   TaggrRealm,
@@ -24,6 +25,13 @@ import type { AppView } from "./routes";
 type Theme = "noir" | "amber" | "paper";
 type Density = "compact" | "comfortable" | "large";
 type FeedMode = "gallery" | "forum";
+type ComposeSeed = {
+  nonce: number;
+  mode: "create" | "edit";
+  input: CreatePostInput;
+  postId?: string;
+  originalText?: string;
+};
 
 const appName = import.meta.env.VITE_APP_NAME ?? "Taggr Gallery";
 const apiMode = import.meta.env.VITE_TAGGR_API_MODE ?? "real";
@@ -31,6 +39,26 @@ const configuredDefaultRealm = import.meta.env.VITE_DEFAULT_REALM || undefined;
 
 function readSetting<T extends string>(key: string, fallback: T) {
   return (localStorage.getItem(key) as T | null) ?? fallback;
+}
+
+function buildQuoteDraft(post: TaggrPost): CreatePostInput {
+  return {
+    realm: post.realm,
+    text: "",
+    repostId: post.id,
+  };
+}
+
+function buildEditDraft(post: TaggrPost): CreatePostInput {
+  return {
+    realm: post.realm,
+    text: post.bodyMarkdown ?? post.text,
+  };
+}
+
+function mergePosts(current: TaggrPost[], incoming: TaggrPost[]) {
+  const seen = new Set(current.map((post) => post.id));
+  return [...current, ...incoming.filter((post) => !seen.has(post.id))];
 }
 
 export function App() {
@@ -58,8 +86,13 @@ export function App() {
   const [realms, setRealms] = useState<TaggrRealm[]>([]);
   const [selectedPost, setSelectedPost] = useState<TaggrPost | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [viewerHandle, setViewerHandle] = useState<string | null>(null);
   const [profile, setProfile] = useState<TaggrProfile | null>(null);
+  const [profilePage, setProfilePage] = useState(0);
+  const [profileHasMore, setProfileHasMore] = useState(false);
+  const [isLoadingProfileMore, setIsLoadingProfileMore] = useState(false);
   const [profileTarget, setProfileTarget] = useState<string | null>(null);
+  const [composeSeed, setComposeSeed] = useState<ComposeSeed | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
   useEffect(() => {
@@ -96,14 +129,22 @@ export function App() {
     if (activeView !== "profile") return;
     if (apiMode === "real" && !profileTarget && !isAuthenticated) {
       setProfile(null);
+      setProfilePage(0);
+      setProfileHasMore(false);
       return;
     }
 
     const profileId = profileTarget ?? (apiMode === "real" ? "" : "user-orbit");
     setProfile(null);
+    setProfilePage(0);
+    setProfileHasMore(false);
+    setIsLoadingProfileMore(false);
     taggrClient
       .getProfile(profileId)
-      .then(setProfile)
+      .then((nextProfile) => {
+        setProfile(nextProfile);
+        setProfileHasMore(nextProfile.posts.length > 0);
+      })
       .catch((error) => {
         setStatus(
           error instanceof Error ? error.message : "Profile could not be loaded",
@@ -126,6 +167,7 @@ export function App() {
     setStatus(null);
     if (apiMode === "mock") {
       setIsAuthenticated(true);
+      setViewerHandle("you.archive");
       setStatus("Mock session active. Real mode uses Internet Identity.");
       return;
     }
@@ -143,17 +185,20 @@ export function App() {
       const hasIdentity = await identityAdapter.isAuthenticated();
       if (!hasIdentity) {
         setIsAuthenticated(false);
+        setViewerHandle(null);
         return;
       }
 
       if (apiMode === "real") {
-        await taggrClient.getProfile("");
+        const viewer = await taggrClient.getProfile("");
+        setViewerHandle(viewer.handle);
       }
 
       setIsAuthenticated(true);
       setStatus(null);
     } catch {
       setIsAuthenticated(false);
+      setViewerHandle(null);
       await identityAdapter.logout().catch(() => undefined);
       setStatus(
         "Taggr identity was present, but Taggr could not resolve it to a user. Existing Taggr accounts only work through Taggr's canonical canister frontend or a custom domain registered in Taggr's domain registry.",
@@ -164,6 +209,7 @@ export function App() {
   async function logout() {
     await identityAdapter.logout().catch(() => undefined);
     setIsAuthenticated(false);
+    setViewerHandle(null);
     setProfileTarget(null);
     setStatus(null);
   }
@@ -177,6 +223,51 @@ export function App() {
     setSelectedPost(null);
     setProfileTarget(handle);
     setActiveView("profile");
+  }
+
+  function quotePost(post: TaggrPost) {
+    setComposeSeed({ nonce: Date.now(), mode: "create", input: buildQuoteDraft(post) });
+    setSelectedPost(null);
+    setActiveView("create");
+  }
+
+  function editPost(post: TaggrPost) {
+    setComposeSeed({
+      nonce: Date.now(),
+      mode: "edit",
+      postId: post.id,
+      originalText: post.bodyMarkdown ?? post.text,
+      input: buildEditDraft(post),
+    });
+    setSelectedPost(null);
+    setActiveView("create");
+  }
+
+  async function loadMoreProfilePosts() {
+    if (!profile || isLoadingProfileMore || !profileHasMore) return;
+
+    const nextPage = profilePage + 1;
+    setIsLoadingProfileMore(true);
+
+    try {
+      const nextPosts = await taggrClient.getProfilePosts(profile.handle, nextPage);
+      setProfile((current) =>
+        current
+          ? {
+              ...current,
+              posts: mergePosts(current.posts, nextPosts),
+            }
+          : current,
+      );
+      setProfilePage(nextPage);
+      setProfileHasMore(nextPosts.length > 0);
+    } catch (error) {
+      setStatus(
+        error instanceof Error ? error.message : "Profile could not load more posts",
+      );
+    } finally {
+      setIsLoadingProfileMore(false);
+    }
   }
 
   return (
@@ -241,6 +332,12 @@ export function App() {
             realms={realms}
             defaultRealm={realm ?? defaultRealm}
             isAuthenticated={isAuthenticated}
+            draft={composeSeed?.input}
+            draftNonce={composeSeed?.nonce}
+            mode={composeSeed?.mode}
+            editPostId={composeSeed?.postId}
+            originalText={composeSeed?.originalText}
+            onDraftApplied={() => setComposeSeed(null)}
             onCreated={(post) => {
               setSelectedPost(post);
               setActiveView("gallery");
@@ -256,7 +353,13 @@ export function App() {
           ) : profile ? (
             <>
               <ProfileHeader profile={profile} />
-              <ProfileGrid posts={profile.posts} onOpenPost={setSelectedPost} />
+              <ProfileGrid
+                posts={profile.posts}
+                hasMore={profileHasMore}
+                isLoadingMore={isLoadingProfileMore}
+                onLoadMore={loadMoreProfilePosts}
+                onOpenPost={setSelectedPost}
+              />
             </>
           ) : (
             <div className="p-6 font-mono text-xs uppercase text-[var(--color-muted)]">
@@ -295,9 +398,12 @@ export function App() {
         <PostDetail
           post={selectedPost}
           isAuthenticated={isAuthenticated}
+          canEdit={viewerHandle === selectedPost.authorHandle}
           onClose={() => setSelectedPost(null)}
+          onEditPost={editPost}
           onOpenPost={setSelectedPost}
           onOpenProfile={openProfile}
+          onQuotePost={quotePost}
         />
       ) : null}
     </div>

@@ -7,14 +7,17 @@ import {
 import type { Identity } from "@dfinity/agent";
 import { bufFromBufLike, IDL } from "@dfinity/candid";
 import { Principal } from "@dfinity/principal";
+import DiffMatchPatch from "diff-match-patch";
 import { identityAdapter } from "../icp/identity";
 import { creditsToUsd } from "../utils/rewards";
 import type {
   CreateCommentInput,
   CreatePostInput,
+  EditPostInput,
   FeedParams,
   TaggrClient,
   TaggrComment,
+  TaggrPoll,
   TaggrPost,
   TaggrProfile,
   TaggrRealm,
@@ -50,6 +53,10 @@ type TaggrNativePost = {
   meta?: TaggrMeta;
   encrypted?: boolean;
   hidden_for?: number[];
+  extension?:
+    | { Poll?: TaggrPoll; Repost?: number; Proposal?: number }
+    | "Feature"
+    | null;
 };
 
 type TaggrNativeRealm = {
@@ -84,6 +91,7 @@ type TaggrConfig = {
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
+const dmp = new DiffMatchPatch();
 
 let statsCache: Promise<TaggrStats> | null = null;
 let configCache: Promise<TaggrConfig> | null = null;
@@ -375,21 +383,72 @@ function firstBodyImage(post: TaggrNativePost) {
   )?.[1];
 }
 
+function encodeExtension(input: CreatePostInput) {
+  if (input.poll) {
+    const options = input.poll.options.map((option) => option.trim()).filter(Boolean);
+    if (options.length >= 2) {
+      return new Uint8Array(
+        textEncoder.encode(
+          JSON.stringify({
+            Poll: {
+              options,
+              votes: {},
+              voters: [],
+              deadline: input.poll.deadline,
+              weighted_by_karma: {},
+              weighted_by_tokens: {},
+            },
+          }),
+        ),
+      );
+    }
+  }
+
+  if (input.repostId) {
+    return new Uint8Array(
+      textEncoder.encode(
+        JSON.stringify({
+          Repost: Number(input.repostId),
+        }),
+      ),
+    );
+  }
+
+  return undefined;
+}
+
+function toPostBody(input: Pick<CreatePostInput, "text" | "imageUrl">) {
+  return [input.text.trim(), input.imageUrl?.trim()].filter(Boolean).join("\n\n");
+}
+
+function getEditPatch(nextText: string, previousText: string) {
+  return dmp.patch_toText(dmp.patch_make(nextText, previousText));
+}
+
 function toPost(post: TaggrNativePost, config?: TaggrConfig): TaggrPost {
   const author = post.meta?.author_name || `user-${post.user}`;
   const imageUrl = firstFileImage(post) || firstBodyImage(post);
   const rewards = rewardsAmount(post, config);
   const bodyMarkdown = post.effBody || post.body || "";
+  const poll = post.extension && typeof post.extension === "object" && "Poll" in post.extension
+    ? post.extension.Poll
+    : undefined;
+  const repostId =
+    post.extension && typeof post.extension === "object" && "Repost" in post.extension
+      ? String(post.extension.Repost)
+      : undefined;
 
   return {
     id: String(post.id),
     authorId: String(post.user),
     authorHandle: author,
     realm: post.realm,
-    text: textExcerpt(post) || post.body || "",
+    text: textExcerpt(post) || post.body || (repostId ? `Repost of #${repostId}` : ""),
     bodyMarkdown,
     imageUrl,
     mediaUrls: imageUrl ? [imageUrl] : [],
+    poll,
+    repostId,
     createdAt: createdAt(post.patches?.[0]?.[0] ?? post.timestamp),
     commentsCount: Math.max((post.tree_size ?? 1) - 1, post.children?.length ?? 0),
     reactionsCount: reactionCount(post),
@@ -474,6 +533,16 @@ async function searchPosts(query: string, paramsPage = 0) {
     .map((result) => result.id)
     .slice(page * pageSize, (page + 1) * pageSize);
   return loadPosts(ids);
+}
+
+async function loadProfilePosts(handle: string, page = 0, identity?: Identity) {
+  const postsResponse = await queryJson<Array<[TaggrNativePost, TaggrMeta]>>(
+    "user_posts",
+    [TAGGR_DOMAIN, handle, page, 0],
+    identity,
+  );
+  const config = await getConfig().catch(() => undefined);
+  return postsResponse.map(expandMeta).map((post) => toPost(post, config));
 }
 
 export const realTaggrClient: TaggrClient = {
@@ -562,13 +631,7 @@ export const realTaggrClient: TaggrClient = {
       throw new Error("Taggr profile not found.");
     }
 
-    const postsResponse = await queryJson<Array<[TaggrNativePost, TaggrMeta]>>(
-      "user_posts",
-      [TAGGR_DOMAIN, profile.name, 0, 0],
-      identity ?? undefined,
-    );
-    const config = await getConfig().catch(() => undefined);
-    const posts = postsResponse.map(expandMeta).map((post) => toPost(post, config));
+    const posts = await loadProfilePosts(profile.name, 0, identity ?? undefined);
 
     return {
       userId: String(profile.id),
@@ -584,11 +647,17 @@ export const realTaggrClient: TaggrClient = {
     };
   },
 
+  async getProfilePosts(handle: string, page: number): Promise<TaggrPost[]> {
+    return loadProfilePosts(handle, page);
+  },
+
   async createPost(input: CreatePostInput): Promise<TaggrPost> {
     const identity = await getIdentityOrThrow();
-    const text = [input.text.trim(), input.imageUrl?.trim()]
-      .filter(Boolean)
-      .join("\n\n");
+    const text = toPostBody(input);
+    const files = input.attachment
+      ? [[input.attachment.name, Array.from(input.attachment.bytes)] as const]
+      : [];
+    const extension = encodeExtension(input);
     const arg = IDL.encode(
       [
         IDL.Text,
@@ -597,7 +666,13 @@ export const realTaggrClient: TaggrClient = {
         IDL.Opt(IDL.Text),
         IDL.Opt(IDL.Vec(IDL.Nat8)),
       ],
-      [text, [], [], input.realm ? [input.realm] : [], []],
+      [
+        text,
+        files,
+        [],
+        input.realm ? [input.realm] : [],
+        extension ? [extension] : [],
+      ],
     );
     const response = await callRawCandid("add_post", arg, identity);
     const result = IDL.decode(
@@ -608,6 +683,36 @@ export const realTaggrClient: TaggrClient = {
     if (result.Err) throw new Error(result.Err);
     const post = await this.getPost(String(result.Ok));
     if (!post) throw new Error("Taggr post was created but could not be loaded.");
+    return post;
+  },
+
+  async editPost(input: EditPostInput): Promise<TaggrPost> {
+    const identity = await getIdentityOrThrow();
+    const text = toPostBody(input);
+    const files = input.attachment
+      ? [[input.attachment.name, Array.from(input.attachment.bytes)] as const]
+      : [];
+    const patch = getEditPatch(text, input.originalText);
+    const arg = IDL.encode(
+      [
+        IDL.Nat64,
+        IDL.Text,
+        IDL.Vec(IDL.Tuple(IDL.Text, IDL.Vec(IDL.Nat8))),
+        IDL.Text,
+        IDL.Opt(IDL.Text),
+      ],
+      [Number(input.postId), text, files, patch, input.realm ? [input.realm] : []],
+    );
+    const response = await callRawCandid("edit_post", arg, identity);
+    const result = IDL.decode(
+      [IDL.Variant({ Ok: IDL.Null, Err: IDL.Text })],
+      response,
+    )[0] as { Ok?: null; Err?: string };
+
+    if (result.Err) throw new Error(result.Err);
+
+    const post = await realTaggrClient.getPost(input.postId);
+    if (!post) throw new Error("Edited post could not be reloaded.");
     return post;
   },
 
@@ -653,6 +758,21 @@ export const realTaggrClient: TaggrClient = {
     const result = await callJson<{ Ok?: unknown; Err?: string }>(
       "react",
       [Number(postId), effReactionId],
+      identity,
+    );
+
+    if (result && "Err" in result) throw new Error(result.Err);
+  },
+
+  async voteOnPoll(
+    postId: string,
+    option: number,
+    anonymously = false,
+  ): Promise<void> {
+    const identity = await getIdentityOrThrow();
+    const result = await callJson<{ Ok?: unknown; Err?: string }>(
+      "vote_on_poll",
+      [Number(postId), option, anonymously],
       identity,
     );
 

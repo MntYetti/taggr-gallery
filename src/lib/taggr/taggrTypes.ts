@@ -9,6 +9,8 @@ export type TaggrPost = {
   bodyMarkdown?: string;
   imageUrl?: string;
   mediaUrls?: string[];
+  poll?: TaggrPoll;
+  repostId?: string;
   createdAt: string;
   commentsCount: number;
   reactionsCount: number;
@@ -45,6 +47,15 @@ export type TaggrComment = {
   createdAt: string;
 };
 
+export type TaggrPoll = {
+  options: string[];
+  votes: Record<string, number[]>;
+  voters: number[];
+  deadline: number;
+  weighted_by_karma: Record<string, number>;
+  weighted_by_tokens: Record<string, number>;
+};
+
 export type TaggrProfile = {
   userId: string;
   handle: string;
@@ -67,10 +78,30 @@ export type FeedParams = {
   page?: number;
 };
 
+export type CreatePostAttachment = {
+  name: string;
+  bytes: Uint8Array;
+  mimeType: string;
+  previewUrl?: string;
+};
+
+export type CreatePollInput = {
+  options: string[];
+  deadline: number;
+};
+
 export type CreatePostInput = {
   text: string;
   realm?: string;
   imageUrl?: string;
+  attachment?: CreatePostAttachment;
+  poll?: CreatePollInput;
+  repostId?: string;
+};
+
+export type EditPostInput = CreatePostInput & {
+  postId: string;
+  originalText: string;
 };
 
 export type CreateCommentInput = {
@@ -85,7 +116,10 @@ export interface TaggrClient {
   getComments(postId: string): Promise<TaggrComment[]>;
   getRealms(): Promise<TaggrRealm[]>;
   getProfile(userId: string): Promise<TaggrProfile>;
+  getProfilePosts(handle: string, page: number): Promise<TaggrPost[]>;
   createPost(input: CreatePostInput): Promise<TaggrPost>;
+  editPost(input: EditPostInput): Promise<TaggrPost>;
   createComment(input: CreateCommentInput): Promise<TaggrComment>;
   reactToPost(postId: string, reactionId?: number): Promise<void>;
+  voteOnPoll(postId: string, option: number, anonymously?: boolean): Promise<void>;
 }
