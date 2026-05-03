@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { taggrClient } from "../../lib/taggr/taggrClient";
 import type { TaggrComment, TaggrPost } from "../../lib/taggr/taggrTypes";
 import { formatDate } from "../../lib/utils/formatDate";
@@ -34,10 +35,12 @@ export function PostDetail({
   const [related, setRelated] = useState<TaggrPost[]>([]);
   const [repost, setRepost] = useState<TaggrPost | null>(null);
   const [activePost, setActivePost] = useState(post);
+  const [activeMediaIndex, setActiveMediaIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setActivePost(post);
+    setActiveMediaIndex(0);
     setRepost(null);
     taggrClient.getComments(post.id).then(setComments);
     taggrClient
@@ -82,7 +85,13 @@ export function PostDetail({
   }
 
   const body = activePost.bodyMarkdown ?? activePost.text;
-  const hasImage = Boolean(activePost.imageUrl);
+  const mediaUrls =
+    activePost.mediaUrls?.length
+      ? activePost.mediaUrls
+      : activePost.imageUrl
+        ? [activePost.imageUrl]
+        : [];
+  const hasImage = mediaUrls.length > 0;
 
   return (
     <Modal title={`post ${activePost.id}`} onClose={onClose}>
@@ -94,12 +103,14 @@ export function PostDetail({
         }
       >
         <div className="border-b border-[var(--color-border)] bg-black/20 lg:border-b-0 lg:border-r">
-          {hasImage && activePost.imageUrl ? (
-            <img
-              src={activePost.imageUrl}
-              alt={imageAlt(activePost.authorHandle, activePost.realm)}
-              className="max-h-[78vh] w-full object-contain"
-              referrerPolicy="no-referrer"
+          {hasImage ? (
+            <PostImageGallery
+              activeIndex={activeMediaIndex}
+              aspectRatios={activePost.mediaAspectRatios}
+              authorHandle={activePost.authorHandle}
+              realm={activePost.realm}
+              urls={mediaUrls}
+              onActiveIndexChange={setActiveMediaIndex}
             />
           ) : (
             <div className="p-5 md:p-8">
@@ -192,5 +203,107 @@ export function PostDetail({
         </aside>
       </div>
     </Modal>
+  );
+}
+
+function PostImageGallery({
+  activeIndex,
+  aspectRatios,
+  authorHandle,
+  realm,
+  urls,
+  onActiveIndexChange,
+}: {
+  activeIndex: number;
+  aspectRatios?: number[];
+  authorHandle: string;
+  realm?: string;
+  urls: string[];
+  onActiveIndexChange: (index: number) => void;
+}) {
+  const activeUrl = urls[activeIndex] ?? urls[0];
+  const hasMultipleImages = urls.length > 1;
+  const aspectRatio = aspectRatios?.[activeIndex] || undefined;
+
+  function move(step: number) {
+    onActiveIndexChange((activeIndex + step + urls.length) % urls.length);
+  }
+
+  return (
+    <div className="grid min-h-[42vh] content-between gap-3 p-3">
+      <div
+        className="relative grid place-items-center overflow-hidden bg-black/30"
+        style={{ aspectRatio: aspectRatio ?? 4 / 3 }}
+      >
+        <button
+          aria-label={
+            hasMultipleImages ? "Show next image" : "Open image in a new tab"
+          }
+          className="h-full max-h-[78vh] w-full"
+          onClick={() => {
+            if (hasMultipleImages) move(1);
+            else window.open(activeUrl, "_blank", "noopener,noreferrer");
+          }}
+          type="button"
+        >
+          <img
+            src={activeUrl}
+            alt={imageAlt(authorHandle, realm)}
+            className="h-full max-h-[78vh] w-full object-contain"
+            referrerPolicy="no-referrer"
+          />
+        </button>
+
+        {hasMultipleImages ? (
+          <>
+            <button
+              aria-label="Previous image"
+              className="absolute left-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center border border-white/20 bg-black/60 text-white backdrop-blur transition hover:bg-black/80"
+              onClick={() => move(-1)}
+              type="button"
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <button
+              aria-label="Next image"
+              className="absolute right-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center border border-white/20 bg-black/60 text-white backdrop-blur transition hover:bg-black/80"
+              onClick={() => move(1)}
+              type="button"
+            >
+              <ChevronRight size={20} />
+            </button>
+            <span className="absolute bottom-3 right-3 border border-white/20 bg-black/60 px-2 py-1 font-mono text-[10px] uppercase text-white">
+              {activeIndex + 1} / {urls.length}
+            </span>
+          </>
+        ) : null}
+      </div>
+
+      {hasMultipleImages ? (
+        <div className="grid grid-flow-col auto-cols-[5.5rem] gap-2 overflow-x-auto pb-1">
+          {urls.map((url, index) => (
+            <button
+              key={`${url}-${index}`}
+              aria-label={`Show image ${index + 1}`}
+              className={`h-20 overflow-hidden border bg-[var(--color-panel-strong)] ${
+                index === activeIndex
+                  ? "border-[var(--color-accent)]"
+                  : "border-[var(--color-border)]"
+              }`}
+              onClick={() => onActiveIndexChange(index)}
+              type="button"
+            >
+              <img
+                src={url}
+                alt=""
+                className="h-full w-full object-cover"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+              />
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }

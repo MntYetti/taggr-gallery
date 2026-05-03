@@ -434,18 +434,17 @@ function bucketImageUrl(bucketId: string, offset: number, len: number) {
   return `https://${bucketId}.raw.icp0.io/image?offset=${offset}&len=${len}`;
 }
 
-function firstFileImage(post: TaggrNativePost) {
-  const files = post.files ?? {};
-  const first = Object.entries(files)[0];
-  if (!first) return undefined;
-  const [fileKey, [offset, len]] = first;
-  const [, bucketId] = fileKey.split("@");
-  return bucketId ? bucketImageUrl(bucketId, offset, len) : undefined;
+function fileImageUrls(post: TaggrNativePost) {
+  return Object.fromEntries(
+    Object.entries(post.files ?? {}).flatMap(([fileKey, [offset, len]]) => {
+      const [id, bucketId] = fileKey.split("@");
+      return id && bucketId ? [[id, bucketImageUrl(bucketId, offset, len)]] : [];
+    }),
+  );
 }
 
-function bodyImageAspectRatio(post: TaggrNativePost) {
-  const body = post.effBody || post.body || "";
-  const dimensions = body.match(/!\[(\d+)x(\d+)(?:,\s*[^\]]*)?]\(/);
+function imageAspectRatioFromAlt(alt: string) {
+  const dimensions = alt.match(/(\d+)x(\d+)/);
   if (!dimensions) return undefined;
 
   const width = Number(dimensions[1]);
@@ -457,13 +456,49 @@ function bodyImageAspectRatio(post: TaggrNativePost) {
   return width / height;
 }
 
-function firstBodyImage(post: TaggrNativePost) {
+function bodyImages(post: TaggrNativePost, files: Record<string, string>) {
   const body = post.effBody || post.body || "";
-  const markdown = body.match(/!\[[^\]]*]\((https?:\/\/[^)]+)\)/i)?.[1];
-  if (markdown) return markdown;
-  return body.match(
-    /(https?:\/\/[^\s)]+\.(?:png|jpe?g|gif|webp|avif)(?:\?[^\s)]*)?)/i,
-  )?.[1];
+  const images: Array<{ url: string; aspectRatio?: number }> = [];
+  const markdownPattern = /!\[([^\]]*)]\(([^)]+)\)/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = markdownPattern.exec(body))) {
+    const [, alt, source] = match;
+    const blobId = source.startsWith("/blob/")
+      ? source.replace("/blob/", "")
+      : undefined;
+    const url = blobId ? files[blobId] : source;
+
+    if (url) {
+      images.push({ url, aspectRatio: imageAspectRatioFromAlt(alt) });
+    }
+  }
+
+  const markdownUrls = new Set(images.map((image) => image.url));
+  const inlineUrls =
+    body.match(
+      /https?:\/\/[^\s)]+\.(?:png|jpe?g|gif|webp|avif)(?:\?[^\s)]*)?/gi,
+    ) ?? [];
+  for (const url of inlineUrls) {
+    if (!markdownUrls.has(url)) images.push({ url });
+  }
+
+  return images;
+}
+
+function postImages(post: TaggrNativePost) {
+  const files = fileImageUrls(post);
+  const images = bodyImages(post, files);
+  const seen = new Set(images.map((image) => image.url));
+
+  for (const url of Object.values(files)) {
+    if (!seen.has(url)) {
+      images.push({ url });
+      seen.add(url);
+    }
+  }
+
+  return images;
 }
 
 function encodeExtension(input: CreatePostInput) {
@@ -510,8 +545,9 @@ function getEditPatch(nextText: string, previousText: string) {
 
 function toPost(post: TaggrNativePost, config?: TaggrConfig): TaggrPost {
   const author = post.meta?.author_name || `user-${post.user}`;
-  const imageUrl = firstFileImage(post) || firstBodyImage(post);
-  const imageAspectRatio = imageUrl ? bodyImageAspectRatio(post) : undefined;
+  const images = postImages(post);
+  const imageUrl = images[0]?.url;
+  const imageAspectRatio = images[0]?.aspectRatio;
   const rewards = rewardsAmount(post, config);
   const bodyMarkdown = post.effBody || post.body || "";
   const poll = post.extension && typeof post.extension === "object" && "Poll" in post.extension
@@ -531,7 +567,8 @@ function toPost(post: TaggrNativePost, config?: TaggrConfig): TaggrPost {
     bodyMarkdown,
     imageUrl,
     imageAspectRatio,
-    mediaUrls: imageUrl ? [imageUrl] : [],
+    mediaUrls: images.map((image) => image.url),
+    mediaAspectRatios: images.map((image) => image.aspectRatio ?? 0),
     poll,
     repostId,
     createdAt: createdAt(post.patches?.[0]?.[0] ?? post.timestamp),

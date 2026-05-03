@@ -1,6 +1,8 @@
 import { LogIn, Search, UserRound } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import type { AppView } from "../../app/routes";
 import type { TaggrRealm } from "../../lib/taggr/taggrTypes";
+import { cx } from "../../lib/utils/classNames";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 
@@ -27,8 +29,38 @@ export function Header({
   onLogin: () => void;
   onProfile: () => void;
 }) {
+  const [isHidden, setIsHidden] = useState(false);
+  const lastScrollYRef = useRef(0);
+
+  useEffect(() => {
+    lastScrollYRef.current = window.scrollY;
+
+    function updateHeaderVisibility() {
+      const currentScrollY = window.scrollY;
+      const delta = currentScrollY - lastScrollYRef.current;
+
+      if (currentScrollY < 24) {
+        setIsHidden(false);
+      } else if (delta > 8) {
+        setIsHidden(true);
+      } else if (delta < -8) {
+        setIsHidden(false);
+      }
+
+      lastScrollYRef.current = currentScrollY;
+    }
+
+    window.addEventListener("scroll", updateHeaderVisibility, { passive: true });
+    return () => window.removeEventListener("scroll", updateHeaderVisibility);
+  }, []);
+
   return (
-    <header className="sticky top-0 z-30 border-b border-[var(--color-border)] bg-[color-mix(in_srgb,var(--color-bg)_88%,transparent)] px-4 py-3 backdrop-blur md:px-6">
+    <header
+      className={cx(
+        "sticky top-0 z-30 border-b border-[var(--color-border)] bg-[color-mix(in_srgb,var(--color-bg)_88%,transparent)] px-4 py-3 backdrop-blur transition-transform duration-200 ease-out md:px-6",
+        isHidden && "-translate-y-full",
+      )}
+    >
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <p className="font-mono text-[10px] uppercase text-[var(--color-muted)]">

@@ -10,6 +10,7 @@ export type TaggrPost = {
   imageUrl?: string;
   imageAspectRatio?: number;
   mediaUrls?: string[];
+  mediaAspectRatios?: number[];
   poll?: TaggrPoll;
   repostId?: string;
   createdAt: string;
