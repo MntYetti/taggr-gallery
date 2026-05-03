@@ -25,10 +25,12 @@ import type {
 
 const TAGGR_CANISTER_ID =
   import.meta.env.VITE_TAGGR_CANISTER_ID || "6qfxa-ryaaa-aaaai-qbhsq-cai";
-const TAGGR_DOMAIN = import.meta.env.VITE_TAGGR_DOMAIN || "taggr.link";
+const CONFIGURED_TAGGR_DOMAIN = import.meta.env.VITE_TAGGR_DOMAIN;
+const CONFIGURED_DELEGATION_DOMAIN = import.meta.env.VITE_TAGGR_DELEGATION_DOMAIN;
 const AGENT_HOST = import.meta.env.VITE_ICP_HOST || "https://icp-api.io";
 const CANONICAL_BASE =
   import.meta.env.VITE_TAGGR_CANONICAL_URL || "https://taggr.link";
+const DEFAULT_TAGGR_DOMAIN = "taggr.link";
 
 type TaggrMeta = {
   author_name?: string;
@@ -95,6 +97,62 @@ const dmp = new DiffMatchPatch();
 
 let statsCache: Promise<TaggrStats> | null = null;
 let configCache: Promise<TaggrConfig> | null = null;
+
+function normalizeDomain(value?: string) {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+
+  try {
+    const url = new URL(
+      trimmed.includes("://") ? trimmed : `https://${trimmed}`,
+    );
+    return url.hostname;
+  } catch {
+    return trimmed.replace(/^https?:\/\//, "").split("/")[0]?.split(":")[0];
+  }
+}
+
+function getRuntimeHostname() {
+  if (typeof window === "undefined") return undefined;
+  return normalizeDomain(window.location.hostname);
+}
+
+function isLocalDevelopmentHost(hostname?: string) {
+  return (
+    !hostname ||
+    ["localhost", "127.0.0.1", "[::1]", "::1"].includes(hostname) ||
+    /^\d+\.\d+\.\d+\.\d+$/.test(hostname)
+  );
+}
+
+function isIpfsGatewayHost(hostname: string) {
+  return (
+    hostname.includes(".ipfs.") ||
+    hostname.endsWith(".dweb.link") ||
+    hostname.endsWith(".ipfs.dweb.link") ||
+    hostname.startsWith("bafy")
+  );
+}
+
+function getTaggrDomain() {
+  const runtimeHostname = getRuntimeHostname();
+
+  if (
+    runtimeHostname &&
+    !isLocalDevelopmentHost(runtimeHostname) &&
+    !isIpfsGatewayHost(runtimeHostname)
+  ) {
+    return runtimeHostname;
+  }
+
+  return (
+    normalizeDomain(CONFIGURED_DELEGATION_DOMAIN) ||
+    normalizeDomain(CONFIGURED_TAGGR_DOMAIN) ||
+    DEFAULT_TAGGR_DOMAIN
+  );
+}
+
+const TAGGR_DOMAIN = getTaggrDomain();
 
 function getEffParams(args: unknown[]) {
   const values = args.filter((value) => typeof value !== "undefined");

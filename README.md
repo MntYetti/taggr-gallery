@@ -25,7 +25,7 @@ Copy `.env.example` to `.env` and adjust values:
 ```bash
 VITE_TAGGR_CANISTER_ID=6qfxa-ryaaa-aaaai-qbhsq-cai
 VITE_TAGGR_API_MODE=real
-VITE_TAGGR_DOMAIN=6qfxa-ryaaa-aaaai-qbhsq-cai.icp0.io
+VITE_TAGGR_DOMAIN=taggr-gallery.promptops.cc
 VITE_TAGGR_CANONICAL_URL=https://6qfxa-ryaaa-aaaai-qbhsq-cai.icp0.io
 VITE_TAGGR_CANONICAL_AUTH_URL=https://6qfxa-ryaaa-aaaai-qbhsq-cai.icp0.io
 VITE_TAGGR_AUTH_MODE=delegation
@@ -40,6 +40,8 @@ VITE_APP_NAME=Taggr Gallery
 `VITE_TAGGR_API_MODE=mock` uses `src/lib/taggr/mockTaggrClient.ts`.
 
 `VITE_TAGGR_API_MODE=real` uses `src/lib/taggr/realTaggrClient.ts`. The real adapter follows Taggr’s current frontend/API pattern: read methods are raw JSON canister queries, while post/comment creation uses the canister’s Candid `add_post` method.
+
+`VITE_TAGGR_DOMAIN` is the registered Taggr domain whose realm/domain settings should apply to feed, search, realm, and profile queries. In normal production deployments the client uses the browser hostname automatically, so the deployed host must match the domain registered in Taggr. The env value is mainly a fallback for local development or IPFS gateway previews where the browser hostname is not the registered domain.
 
 Authentication follows Taggr’s custom-frontend model. By default, `VITE_TAGGR_AUTH_MODE=delegation` creates a temporary local identity and redirects the user to Taggr’s canister-hosted canonical frontend, configured by `VITE_TAGGR_CANONICAL_AUTH_URL`, to authorize that identity through Taggr’s `set_delegation` flow. Set `VITE_TAGGR_AUTH_MODE=direct` only for canonical deployments or local experiments where you intentionally want direct Internet Identity against the current origin.
 
