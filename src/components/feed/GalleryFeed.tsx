@@ -33,6 +33,7 @@ export function GalleryFeed({
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [page, setPage] = useState(0);
+  const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const loaderRef = useRef<HTMLDivElement | null>(null);
@@ -51,6 +52,7 @@ export function GalleryFeed({
     setIsLoadingMore(false);
     setError(null);
     setPage(0);
+    setOffset(0);
     setHasMore(true);
 
     taggrClient
@@ -58,6 +60,7 @@ export function GalleryFeed({
       .then((nextPosts) => {
         if (requestIdRef.current !== requestId) return;
         setPosts(nextPosts);
+        setOffset(Number(nextPosts[0]?.id) || 0);
         setHasMore(nextPosts.length > 0);
       })
       .catch((err: Error) => {
@@ -82,6 +85,7 @@ export function GalleryFeed({
         sort,
         imagesOnly,
         page: nextPage,
+        offset,
       });
       if (requestIdRef.current !== requestId) return;
       setPosts((current) => mergePosts(current, nextPosts));
@@ -109,7 +113,7 @@ export function GalleryFeed({
 
     observer.observe(node);
     return () => observer.disconnect();
-  }, [posts.length, hasMore, error, isLoading, isLoadingMore, page]);
+  }, [posts.length, hasMore, error, isLoading, isLoadingMore, page, offset]);
 
   return (
     <section>
@@ -144,8 +148,13 @@ export function GalleryFeed({
         <>
           {feedMode === "gallery" ? (
             <MasonryGrid density={density}>
-              {posts.map((post) => (
-                <PostCard key={post.id} post={post} onOpen={onOpenPost} />
+              {posts.map((post, index) => (
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  priority={index < 6}
+                  onOpen={onOpenPost}
+                />
               ))}
             </MasonryGrid>
           ) : (

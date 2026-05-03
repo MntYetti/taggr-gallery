@@ -97,6 +97,7 @@ const dmp = new DiffMatchPatch();
 
 let statsCache: Promise<TaggrStats> | null = null;
 let configCache: Promise<TaggrConfig> | null = null;
+const agentCache = new Map<string, Promise<HttpAgent>>();
 
 function normalizeDomain(value?: string) {
   const trimmed = value?.trim();
@@ -184,6 +185,16 @@ function toArrayBuffer(value: ArrayBuffer | Uint8Array): ArrayBuffer {
 }
 
 async function createAgent(identity?: Identity) {
+  const cacheKey = identity?.getPrincipal().toString() ?? "anonymous";
+  const cached = agentCache.get(cacheKey);
+  if (cached) return cached;
+
+  const agentPromise = createUncachedAgent(identity);
+  agentCache.set(cacheKey, agentPromise);
+  return agentPromise;
+}
+
+async function createUncachedAgent(identity?: Identity) {
   const agent = new HttpAgent({ host: AGENT_HOST, identity });
 
   if (AGENT_HOST.includes("localhost")) {
@@ -432,6 +443,20 @@ function firstFileImage(post: TaggrNativePost) {
   return bucketId ? bucketImageUrl(bucketId, offset, len) : undefined;
 }
 
+function bodyImageAspectRatio(post: TaggrNativePost) {
+  const body = post.effBody || post.body || "";
+  const dimensions = body.match(/!\[(\d+)x(\d+)(?:,\s*[^\]]*)?]\(/);
+  if (!dimensions) return undefined;
+
+  const width = Number(dimensions[1]);
+  const height = Number(dimensions[2]);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || height <= 0) {
+    return undefined;
+  }
+
+  return width / height;
+}
+
 function firstBodyImage(post: TaggrNativePost) {
   const body = post.effBody || post.body || "";
   const markdown = body.match(/!\[[^\]]*]\((https?:\/\/[^)]+)\)/i)?.[1];
@@ -486,6 +511,7 @@ function getEditPatch(nextText: string, previousText: string) {
 function toPost(post: TaggrNativePost, config?: TaggrConfig): TaggrPost {
   const author = post.meta?.author_name || `user-${post.user}`;
   const imageUrl = firstFileImage(post) || firstBodyImage(post);
+  const imageAspectRatio = imageUrl ? bodyImageAspectRatio(post) : undefined;
   const rewards = rewardsAmount(post, config);
   const bodyMarkdown = post.effBody || post.body || "";
   const poll = post.extension && typeof post.extension === "object" && "Poll" in post.extension
@@ -504,6 +530,7 @@ function toPost(post: TaggrNativePost, config?: TaggrConfig): TaggrPost {
     text: textExcerpt(post) || post.body || (repostId ? `Repost of #${repostId}` : ""),
     bodyMarkdown,
     imageUrl,
+    imageAspectRatio,
     mediaUrls: imageUrl ? [imageUrl] : [],
     poll,
     repostId,
@@ -569,7 +596,7 @@ async function feedQuery(params: FeedParams) {
     TAGGR_DOMAIN,
     realm,
     params.page ?? 0,
-    0,
+    params.offset ?? 0,
     true,
   ]);
   return response.map(expandMeta);
@@ -605,12 +632,15 @@ async function loadProfilePosts(handle: string, page = 0, identity?: Identity) {
 
 export const realTaggrClient: TaggrClient = {
   async getFeed(params: FeedParams): Promise<TaggrPost[]> {
-    await getStats().catch(() => undefined);
-    const config = await getConfig().catch(() => undefined);
-    const nativePosts =
+    void getStats().catch(() => undefined);
+    const feedPromise =
       params.query && params.query.trim().length >= 2
-        ? await searchPosts(params.query.trim(), params.page)
-        : await feedQuery(params);
+        ? searchPosts(params.query.trim(), params.page)
+        : feedQuery(params);
+    const [config, nativePosts] = await Promise.all([
+      getConfig().catch(() => undefined),
+      feedPromise,
+    ]);
     const mapped = nativePosts.map((post) => toPost(post, config)).filter((post) => {
       if (params.realm && post.realm !== params.realm) return false;
       if (params.imagesOnly && !post.imageUrl) return false;

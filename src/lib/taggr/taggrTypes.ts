@@ -8,6 +8,7 @@ export type TaggrPost = {
   text: string;
   bodyMarkdown?: string;
   imageUrl?: string;
+  imageAspectRatio?: number;
   mediaUrls?: string[];
   poll?: TaggrPoll;
   repostId?: string;
@@ -76,6 +77,7 @@ export type FeedParams = {
   imagesOnly?: boolean;
   query?: string;
   page?: number;
+  offset?: number;
 };
 
 export type CreatePostAttachment = {
