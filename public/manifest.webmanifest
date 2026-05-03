@@ -2,9 +2,36 @@
   "name": "Taggr Gallery",
   "short_name": "Taggr Gallery",
   "description": "A visual archive frontend for Taggr on ICP.",
-  "start_url": ".",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#090a08",
   "theme_color": "#96d7b2",
-  "icons": []
+  "categories": ["social", "photo", "news"],
+  "icons": [
+    {
+      "src": "./favicon.ico",
+      "sizes": "16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "./apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./taggr-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./taggr-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
 }
